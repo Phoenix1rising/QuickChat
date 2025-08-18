@@ -5,8 +5,15 @@ import { AuthContext } from "../../context/AuthContext";
 import { ChatContext } from "../../context/ChatContext";
 
 const LeftSidebar = () => {
-  const { getUsers, users, selectedUser, setSelectedUser, unseenMessages } =
-    useContext(ChatContext);
+  const {
+    getUsers,
+    users,
+    selectedUser,
+    setSelectedUser,
+    unseenMessages,
+    markMessagesSeen,
+    getMessages, // ✅ added here
+  } = useContext(ChatContext);
   const { logout, onlineUsers } = useContext(AuthContext);
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -15,11 +22,11 @@ const LeftSidebar = () => {
   // Filtered users
   const filteredUsers = searchTerm
     ? users.filter((user) =>
-      user.fullName.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+        user.fullName.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     : users;
 
-  // Fetch users when onlineUsers changes
+  // Fetch users whenever onlineUsers change
   useEffect(() => {
     getUsers();
   }, [onlineUsers, getUsers]);
@@ -29,8 +36,9 @@ const LeftSidebar = () => {
 
   return (
     <div
-      className={`bg-[#8185B2]/10 h-full p-5 rounded-r-xl overflow-y-scroll text-white ${selectedUser ? "max-md:hidden" : ""
-        }`}
+      className={`bg-[#8185B2]/10 h-full p-5 rounded-r-xl overflow-y-scroll text-white ${
+        selectedUser ? "max-md:hidden" : ""
+      }`}
     >
       {/* Top section */}
       <div className="pb-5">
@@ -80,10 +88,15 @@ const LeftSidebar = () => {
 
           return (
             <div
-              onClick={() => setSelectedUser(user)}
+              onClick={() => {
+                setSelectedUser(user);
+                getMessages(user._id);   // ✅ load chat history
+                markMessagesSeen(user._id); // ✅ reset unseen badge
+              }}
               key={user._id}
-              className={`relative flex items-center gap-2 p-2 pl-4 rounded cursor-pointer max-sm:text-sm ${selectedUser?._id === user._id ? "bg-[#282142]/50" : ""
-                }`}
+              className={`relative flex items-center gap-2 p-2 pl-4 rounded cursor-pointer max-sm:text-sm ${
+                selectedUser?._id === user._id ? "bg-[#282142]/50" : ""
+              }`}
             >
               <img
                 src={user?.profilePic || assets.avatar_icon}
