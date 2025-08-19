@@ -6,7 +6,7 @@ import { AuthContext } from "../../context/AuthContext";
 import toast from "react-hot-toast";
 
 const ChatContainer = () => {
-  const { messages, selectedUser, setSelectedUser, sendMessage, getMessages } =
+  const { messages, setMessages, selectedUser, setSelectedUser, sendMessage, getMessages } =
     useContext(ChatContext);
   const { authUser, onlineUsers } = useContext(AuthContext);
 
@@ -14,12 +14,15 @@ const ChatContainer = () => {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
 
+  // ✅ Load messages for selected user and clear old messages
   useEffect(() => {
     if (selectedUser?._id) {
+      setMessages([]); // clear previous messages immediately
       getMessages(selectedUser._id);
     }
-  }, [selectedUser, getMessages]);
+  }, [selectedUser, getMessages, setMessages]);
 
+  // ✅ Auto-scroll to bottom when messages change
   useEffect(() => {
     scrollEnd.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -30,10 +33,7 @@ const ChatContainer = () => {
 
     setSending(true);
     try {
-      await sendMessage(
-        { text: input.trim() },
-        selectedUser?._id
-      );
+      await sendMessage({ text: input.trim() }, selectedUser?._id);
       setInput("");
     } catch {
       toast.error("Failed to send message. Please try again.");
@@ -51,10 +51,7 @@ const ChatContainer = () => {
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
-        await sendMessage(
-          { image: reader.result },
-          selectedUser?._id
-        );
+        await sendMessage({ image: reader.result }, selectedUser?._id);
       } catch {
         toast.error("Failed to send image. Please try again.");
       }

@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "src": "/api/(.*)",
+      "dest": "server/index.js"
+    }
+  ]
+}

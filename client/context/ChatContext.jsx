@@ -10,11 +10,30 @@ export const ChatContext = createContext();
 export const ChatProvider = ({ children }) => {
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
+
+  // store all messages grouped by userId
+  const [allMessages, setAllMessages] = useState({});
   const [messages, setMessages] = useState([]);
+
   const [unseenMessages, setUnseenMessages] = useState({});
   const { authUser } = useContext(AuthContext);
 
   const API_BASE = "/api/messages";
+
+  // helper to add message to cache
+  const addMessage = useCallback(
+    (userId, msg) => {
+      setAllMessages((prev) => {
+        const updated = [...(prev[userId] || []), msg];
+        // update active chat if open
+        if (selectedUser?._id === userId) {
+          setMessages(updated);
+        }
+        return { ...prev, [userId]: updated };
+      });
+    },
+    [selectedUser]
+  );
 
   // ✅ setup socket connection
   useEffect(() => {
@@ -24,28 +43,30 @@ export const ChatProvider = ({ children }) => {
       query: { userId: authUser._id },
     });
 
-    // 👂 listen for new incoming messages
     socket.on("newMessage", (msg) => {
       console.log("📩 New incoming message:", msg);
 
-      if (msg.senderId === selectedUser?._id) {
-        // If we are chatting with the sender → append directly
-        setMessages((prev) => [...prev, msg]);
-        // mark as seen immediately
-        markMessagesSeen(msg.senderId);
+      const fromUser = msg.senderId;
+
+      if (fromUser === selectedUser?._id) {
+        // currently chatting with this user
+        addMessage(fromUser, msg);
+        markMessagesSeen(fromUser);
       } else {
-        // If we are not in that chat → increment unseen counter
+        // increase unseen count
         setUnseenMessages((prev) => ({
           ...prev,
-          [msg.senderId]: (prev[msg.senderId] || 0) + 1,
+          [fromUser]: (prev[fromUser] || 0) + 1,
         }));
+        // still store in cache
+        addMessage(fromUser, msg);
       }
     });
 
     return () => {
       socket.disconnect();
     };
-  }, [authUser, selectedUser]);
+  }, [authUser, selectedUser, addMessage]);
 
   // ✅ fetch users
   const getUsers = useCallback(async () => {
@@ -84,33 +105,46 @@ export const ChatProvider = ({ children }) => {
 
       try {
         const res = await axios.post(`${API_BASE}/send/${receiverId}`, msg);
-        setMessages((prev) => [
-          ...prev,
-          { ...res.data, senderId: authUser._id, createdAt: new Date() },
-        ]);
+        const newMsg = { ...res.data, senderId: authUser._id, createdAt: new Date() };
+        addMessage(receiverId, newMsg);
       } catch (err) {
         console.error("Error sending message:", err);
         toast.error("Failed to send message.");
       }
     },
-    [authUser]
+    [authUser, addMessage]
   );
 
   // ✅ get messages for a user
-  const getMessages = useCallback(async (userId) => {
-    try {
-      const res = await axios.get(`${API_BASE}/${userId}`);
-      const dataArray = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data.messages)
-        ? res.data.messages
-        : [];
-      setMessages(dataArray);
-    } catch (err) {
-      console.error("Error fetching messages:", err);
-      toast.error("Failed to fetch messages.");
-    }
-  }, []);
+  const getMessages = useCallback(
+    async (userId) => {
+      try {
+        // clear previous messages instantly when switching
+        setMessages([]);
+
+        // use cache if available
+        if (allMessages[userId]) {
+          setMessages(allMessages[userId]);
+          return;
+        }
+
+        // fetch from API
+        const res = await axios.get(`${API_BASE}/${userId}`);
+        const dataArray = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.data.messages)
+          ? res.data.messages
+          : [];
+
+        setAllMessages((prev) => ({ ...prev, [userId]: dataArray }));
+        setMessages(dataArray);
+      } catch (err) {
+        console.error("Error fetching messages:", err);
+        toast.error("Failed to fetch messages.");
+      }
+    },
+    [allMessages]
+  );
 
   return (
     <ChatContext.Provider
@@ -119,6 +153,7 @@ export const ChatProvider = ({ children }) => {
         selectedUser,
         setSelectedUser,
         messages,
+        setMessages,      // ✅ expose so ChatContainer can reset manually
         unseenMessages,
         getUsers,
         markMessagesSeen,
